@@ -1,0 +1,8 @@
+/target
+studio/node_modules
+studio/dist
+.env
+.env.*
+.DS_Store
+.claude/settings.local.json
+CLAUDE.md
