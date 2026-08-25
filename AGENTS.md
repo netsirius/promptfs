@@ -31,6 +31,10 @@ Greenfield. **Current phase: 1.** Nothing below is implemented yet — this file
 decisions already made so agents don't re-litigate them. Full spec, pipelines and
 rationale: [`docs/architecture.md`](docs/architecture.md) — read it on demand, not by default.
 
+Phase-1 work is broken down in [`docs/phase-1.md`](docs/phase-1.md). **Read it before
+starting any phase-1 task**: it carries the owner of each task, and a task owned by Héctor is
+scaffolded to the edge with a single `TODO(human)` and left unimplemented.
+
 | Phase | Scope |
 |---|---|
 | 1 | Workspace split (`promptfs-core` + `promptfs-server`), `git2` bare-repo reads, `minijinja` rendering, basic `axum` REST |
