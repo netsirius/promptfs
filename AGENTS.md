@@ -25,6 +25,25 @@ Two constraints drive every design decision:
 
 If a change conflicts with either, it is the wrong change.
 
+## Vocabulary
+
+These words are overloaded and the overloading is load-bearing. Use them precisely.
+
+| Term | Means |
+|---|---|
+| **prompt** | The *file*. A template with holes — never the text sent to a model |
+| **source** | The raw text of a prompt file, frontmatter included |
+| **compile** | Source → Jinja AST. Happens once, before any render |
+| **render** | Template + variables → the final string sent to the model |
+| **resolve** | Prompt name + environment + routing key → one specific target ref |
+| **target** | One weighted entry in a deployment: a ref plus its weight |
+| **ref** | A fully-qualified Git reference — `tags/v1.2.0`, `heads/main`. Never bare |
+| **ruleset** | The deployment strategies for one environment, from `deployments.yaml` |
+| **bundle** | Ruleset + every active target's source, for one environment. What an SDK syncs |
+| **snapshot** | A bundle written to a file at build time and vendored into an app image |
+| **core** | The `promptfs-core` crate specifically. Never a loose synonym for the server |
+| **routing key** | The string that seeds canary weighting. Stable across a retry |
+
 ## Status
 
 Greenfield. **Current phase: 1.** Nothing below is implemented yet — this file records
