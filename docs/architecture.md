@@ -99,7 +99,7 @@ invariant 8: a prompt file becomes a string in exactly one place in this product
 | Component | Crate | Rationale |
 |---|---|---|
 | Template engine | `minijinja` | By Armin Ronacher (author of Jinja2 and Flask). No heavy dependencies, ultra-fast, safe, Jinja2-syntax compatible. Owns the `Environment`, with autoescape explicitly off. |
-| Serialization | `serde`, `serde_yaml`, `serde_json` | The de facto serialization standard in Rust. |
+| Serialization | `serde`, `serde_yaml_ng`, `serde_json` | The de facto serialization standard in Rust. |
 
 Nothing else. The core ships inside customers' processes, so every dependency added here is
 a dependency added to their application. It is synchronous, does no I/O and needs no runtime.

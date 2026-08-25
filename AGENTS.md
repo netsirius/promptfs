@@ -96,7 +96,7 @@ dependency, for code that never reads a repo.
 | Git access | `git2` (libgit2) | `promptfs-server` only. Never shell out to the `git` binary |
 | Templating | `minijinja` | Not `tera`, not `handlebars` |
 | Cache | `moka` | Concurrent, TinyLFU |
-| Serialization | `serde` + `serde_yaml` + `serde_json` | |
+| Serialization | `serde` + `serde_yaml_ng` + `serde_json` | Not `serde_yaml`: archived 2024-03. See D-017 |
 | Static assets | `rust-embed` | Studio build embedded at compile time |
 | Python bindings | `pyo3` + `maturin`, `abi3` | One wheel per platform covers Python 3.8+ |
 | Wheel CI | `cibuildwheel` | ~5 artifacts per release |
@@ -209,6 +209,22 @@ cd studio && npm run build        # produces studio/dist/, consumed by rust-embe
 - Every non-trivial module leaves one runnable check behind. No test frameworks beyond
   `#[test]` / `#[tokio::test]`.
 - Commit messages are plain. No AI attribution trailers or footers.
+- Comments are English, whatever language the work happens in. A comment says what breaks,
+  not what the line does — `.claude/skills/fixture-repo/template.rs` is the reference
+  ("Weights are deliberately not 50/50 so an off-by-one in bucketing is visible"). `///` on
+  a field carries the constraint that makes the field necessary; `//!` names the boundary
+  the module sits on.
+- A *why* with a rejected alternative goes in `docs/decisions.md`, not inline. The code gets
+  the one-line constraint and a `See D-0NN`. Two copies of an argument drift, and the copy
+  in the source is the one nobody updates.
+- Make illegal states unrepresentable before writing a check that catches them.
+  `MissingInput { name: String }` with no value field *is* invariant 2; a reviewer
+  remembering not to log the value is not.
+- Newtype what the contract constrains — a ref, a prompt name, a routing key.
+  `fn resolve(r: &str)` cannot say it wants `tags/v1.2.0` and not `v1.2.0`, which is the
+  first trap in the Git layer.
+- Parse at the boundary, not at the point of use: frontmatter becomes a `PromptMeta` once,
+  where the file path and line are still in hand for the error.
 
 ## Working style
 

@@ -322,3 +322,83 @@ that motivated gRPC. What remains is the universal path, whose whole point is be
 from `curl` and from languages with no SDK — precisely where REST wins.
 
 **Would invalidate this:** a consumer that needs streaming renders, which REST handles badly.
+
+---
+
+## D-017 · `serde_yaml_ng`, not `serde_yaml`
+
+**Date:** 2026-08-25 · **Status:** accepted · **Touches:** the stack table in AGENTS.md
+
+YAML parsing — prompt frontmatter and `.promptfs/deployments.yaml` — uses `serde_yaml_ng`.
+
+**Rejected:** `serde_yaml` 0.9.34, which is what the stack table said until today. Also
+rejected: `serde_yml`, a different fork with a history of obfuscated code in its releases.
+
+**Why:** `serde_yaml` was archived by its author in March 2024. There will be no 0.9.35, for
+a security report or anything else. This crate parses YAML out of a repository PromptFS does
+not control, on a path reachable from an unauthenticated webhook, so "unmaintained" is a
+supply-chain position rather than a style preference. `serde_yaml_ng` is API-compatible — the
+migration is one line in one manifest — and is maintained. Its transitive
+`unsafe-libyaml` is libyaml transpiled to Rust, so the wheel still needs no system library.
+
+**Would invalidate this:** `serde_yaml_ng` going quiet in turn, or the ecosystem converging on
+a different maintained fork. The API compatibility that made this switch cheap makes the next
+one cheap too.
+
+---
+
+## D-018 · minijinja's `debug` feature is off, by feature and not at runtime
+
+**Date:** 2026-08-25 · **Status:** accepted · **Touches:** invariant 2
+
+`promptfs-core` depends on minijinja with `default-features = false` and the default feature
+set minus `debug`.
+
+**Rejected:** keeping the defaults and calling `Environment::set_debug(false)`. Also rejected:
+hand-picking a narrower feature list.
+
+**Why:** `debug` is on by default and appends the caller's render variables to the error's
+`Debug` output — verified, not assumed:
+
+```
+Referenced variables: { secreto: "CARD-4111-1111-1111" }
+```
+
+Invariant 2 says render variables never reach an error message. `{:?}` on an error is what
+`tracing`, `anyhow` and a panicking `unwrap()` all do, so this leaks through paths nobody
+wrote deliberately. A runtime `set_debug(false)` is one deleted line away from being wrong
+and nothing in CI would notice; removing the feature makes the leak unrepresentable.
+
+Every other default feature is kept on purpose. Features are public template surface: adding
+one later is additive and free, removing one breaks every prompt already written against it,
+and a wheel on PyPI cannot be made to upgrade. So the rule is defaults minus what has a
+written reason, never a list assembled from scratch.
+
+**Would invalidate this:** minijinja separating error verbosity from variable capture, which
+would let us keep the better diagnostics without the leak.
+
+---
+
+## D-019 · No `[workspace.dependencies]` table
+
+**Date:** 2026-08-26 · **Status:** accepted · **Touches:** invariant 8
+
+Each crate declares its own dependencies with its own versions. The root manifest carries
+`[workspace.package]` for metadata inheritance and nothing else.
+
+**Rejected:** the idiomatic central `[workspace.dependencies]` table with members writing
+`dep = { workspace = true }`. It is what most Rust workspaces do and someone will propose it.
+
+**Why:** it optimises for the wrong thing here. The benefit is keeping one version of a crate
+across members — which the shared `Cargo.lock` already does, since the resolver unifies
+compatible requirements whether or not the table exists. What the table changes is the *cost
+of adding a dependency to `promptfs-core`*: with it, a crate the server pulled in is already
+listed at the root and reaching for it in the core is one word, `workspace = true`. Invariant
+8 exists because that list ships inside a customer's Python interpreter, and
+`check-invariants.sh` only catches the seven names it knows. Making the core spell out every
+version keeps each addition a deliberate act with a diff worth reading.
+
+**Would invalidate this:** the two crates converging on a large shared dependency set, where
+the drift risk from duplicated version requirements outweighs the friction. A third crate
+(`promptfs-py`) that legitimately shares the core's exact list would be the trigger to
+re-examine.

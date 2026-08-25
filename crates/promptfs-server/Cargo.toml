@@ -1,0 +1,10 @@
+[package]
+name = "promptfs-server"
+description = "PromptFS server: bare-repo Git reads, the REST surface and the embedded Studio."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+promptfs-core = { path = "../promptfs-core" }

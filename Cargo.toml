@@ -1,0 +1,12 @@
+[workspace]
+members = ["crates/promptfs-core", "crates/promptfs-server"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/netsirius/promptfs"
+
+# No [workspace.dependencies] table: the core's dependency list is a boundary, not a
+# convenience, and a shared table makes adding to it a one-word edit. See D-019.
