@@ -17,3 +17,9 @@
 //!   explicitly off. No caller builds its own.
 //!
 //! Phase 1 fills this crate in, module by module, per `docs/phase-1.md`.
+
+pub mod error;
+pub mod meta;
+
+pub use error::PromptError;
+pub use meta::PromptMeta;
