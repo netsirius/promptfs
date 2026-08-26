@@ -9,10 +9,24 @@
 
 use thiserror::Error;
 
+#[derive(Debug, Error)]
+pub enum FormatError {
+    #[error("Missing starting delimiter for block")]
+    MissingStartDelimiter,
+    #[error("Unterminated block, opened at line {opened_at_line}")]
+    UnterminatedBlock { opened_at_line: usize },
+}
+
 /// Everything that can go wrong turning a prompt file into a string.
 #[derive(Debug, Error)]
 pub enum PromptError {
-    #[error("input {input_name:?} was not provided")]
+    #[error("prompt file {promot_path} is not valid: {cause}")]
+    InvalidFormat {
+        /// The path of the prompt file that was invalid.
+        promot_path: String,
+        cause: FormatError,
+    },
+    #[error("input {input_name} was not provided")]
     InputNotFound {
         /// The name of the input that was missing.
         input_name: String,
@@ -30,6 +44,9 @@ mod tests {
     /// Stands in for the *name* of a declared input, which an error may carry.
     const INPUT_NAME: &str = "customer_tier";
 
+    /// Stands in for the path of a prompt file, which an error may carry.
+    const PROMPT_PATH: &str = "t.prompt.md";
+
     /// One entry per variant of `PromptError`. The tests below are only as strong as this
     /// list, so it grows with the enum.
     fn every_variant() -> Vec<PromptError> {
@@ -39,6 +56,14 @@ mod tests {
             // which is why this variant cannot leak.
             PromptError::InputNotFound {
                 input_name: INPUT_NAME.to_string(),
+            },
+            PromptError::InvalidFormat {
+                promot_path: PROMPT_PATH.to_string(),
+                cause: FormatError::MissingStartDelimiter,
+            },
+            PromptError::InvalidFormat {
+                promot_path: PROMPT_PATH.to_string(),
+                cause: FormatError::UnterminatedBlock { opened_at_line: 42 },
             },
         ]
     }
@@ -69,7 +94,7 @@ mod tests {
         for e in every_variant() {
             let display = e.to_string();
             assert!(
-                display.contains(INPUT_NAME),
+                display.contains(INPUT_NAME) || display.contains(PROMPT_PATH),
                 "does not name the input it is about: {display}"
             );
         }
@@ -82,10 +107,10 @@ mod tests {
     fn minijinja_errors_carry_no_variables() {
         let mut env = minijinja::Environment::new();
         env.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
-        env.add_template_owned("t.prompt.md", "{{ card.number }}".to_string())
+        env.add_template_owned(PROMPT_PATH, "{{ card.number }}".to_string())
             .expect("template compiles");
         let err = env
-            .get_template("t.prompt.md")
+            .get_template(PROMPT_PATH)
             .expect("template is registered")
             .render(minijinja::context! { card => SECRET })
             .expect_err("strict undefined must fail");
