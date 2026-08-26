@@ -6,3 +6,4 @@ studio/dist
 .DS_Store
 .claude/settings.local.json
 CLAUDE.md
+.claude/local/

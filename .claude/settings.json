@@ -1,4 +1,28 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/check-invariants.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|Bash"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/check-studio-dist.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(cargo build:*)",

@@ -1,0 +1,34 @@
+[package]
+name = "promptfs-core"
+description = "Parse, compile, render and route PromptFS prompts. No I/O, no async, no Git."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Every line here ships inside a customer's Python interpreter via the pyo3 wheel.
+# check-invariants.sh rejects git2, tokio, axum, hyper, reqwest, async-std and moka here,
+# and any database crate workspace-wide.
+[dependencies]
+
+# `default-features = false` drops exactly one feature: `debug` puts the caller's render
+# variables into the error's `Debug` output, which invariant 2 forbids. Every other default
+# is kept — features are public template surface, and removing one breaks prompts already
+# written against it. See docs/decisions.md D-018.
+minijinja = { version = "2.24", default-features = false, features = [
+    "builtins",            # filters and tests: upper, join, default, ...
+    "macros",              # {% macro %}
+    "multi_template",      # include / extends — how a preamble is shared across prompts
+    "adjacent_loop_items", # loop.previtem / loop.nextitem
+    "deserialization",     # Value -> serde
+    "serde",               # Value <- serde, which is how variables get in at all
+    "std_collections",     # Value from HashMap / BTreeMap / ...
+] }
+
+serde = { version = "1.0", features = ["derive"] }
+
+# Not `serde_yaml`: archived, and this parses YAML from a repo we do not control.
+# See docs/decisions.md D-017. Deliberately absent: serde_json — the bundle is phase 2.
+serde_yaml_ng = "0.10"
+
+thiserror = "2.0"
