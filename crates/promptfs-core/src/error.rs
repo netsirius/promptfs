@@ -20,10 +20,10 @@ pub enum FormatError {
 /// Everything that can go wrong turning a prompt file into a string.
 #[derive(Debug, Error)]
 pub enum PromptError {
-    #[error("prompt file {promot_path} is not valid: {cause}")]
+    #[error("prompt file {prompt_path} is not valid: {cause}")]
     InvalidFormat {
         /// The path of the prompt file that was invalid.
-        promot_path: String,
+        prompt_path: String,
         cause: FormatError,
     },
     #[error("input {input_name} was not provided")]
@@ -58,11 +58,11 @@ mod tests {
                 input_name: INPUT_NAME.to_string(),
             },
             PromptError::InvalidFormat {
-                promot_path: PROMPT_PATH.to_string(),
+                prompt_path: PROMPT_PATH.to_string(),
                 cause: FormatError::MissingStartDelimiter,
             },
             PromptError::InvalidFormat {
-                promot_path: PROMPT_PATH.to_string(),
+                prompt_path: PROMPT_PATH.to_string(),
                 cause: FormatError::UnterminatedBlock { opened_at_line: 42 },
             },
         ]
