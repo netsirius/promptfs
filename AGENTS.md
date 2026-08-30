@@ -209,11 +209,24 @@ cd studio && npm run build        # produces studio/dist/, consumed by rust-embe
 - Every non-trivial module leaves one runnable check behind. No test frameworks beyond
   `#[test]` / `#[tokio::test]`.
 - Commit messages are plain. No AI attribution trailers or footers.
-- Comments are English, whatever language the work happens in. A comment says what breaks,
-  not what the line does — `.claude/skills/fixture-repo/template.rs` is the reference
-  ("Weights are deliberately not 50/50 so an off-by-one in bucketing is visible"). `///` on
-  a field carries the constraint that makes the field necessary; `//!` names the boundary
-  the module sits on.
+- *Clean Code* is the default where it does not collide: intention-revealing names, one thing
+  per function, one concept per test, no magic numbers. Two carve-outs — extraction is free at
+  parse and compile time and is not free in the render path (invariant 6 counts allocations, not
+  functions), and comments follow the book's own *good comments* list: intent, warning of
+  consequences, amplification. Not the slogan that a comment is a failure.
+- Comments are English, whatever language the work happens in, and each one earns its line by
+  answering **"what wrong change does this prevent?"**. No answer, no comment.
+- Budget: one or two lines. A comment that wants a paragraph is a `///` on the item or an entry
+  in `docs/decisions.md` — never a wall of `//` above one statement.
+- One comment, one constraint. Two constraints are two comments, each on the line it guards.
+- Rename before you explain. Renaming `frontmatter` to `after_opening` deleted the comment that
+  the bad name had made necessary; the comments worth keeping are the ones a good name cannot
+  replace.
+- Never warn about a failure the design cannot produce. It reads as authoritative and sends the
+  next reader hunting a bug that is not there.
+- `///` carries the contract and the constraint that makes an item necessary; `//!` names the
+  boundary the module sits on. The reference is `.claude/skills/fixture-repo/template.rs`
+  ("Weights are deliberately not 50/50 so an off-by-one in bucketing is visible").
 - A *why* with a rejected alternative goes in `docs/decisions.md`, not inline. The code gets
   the one-line constraint and a `See D-0NN`. Two copies of an argument drift, and the copy
   in the source is the one nobody updates.

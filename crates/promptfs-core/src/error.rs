@@ -9,26 +9,29 @@
 
 use thiserror::Error;
 
+/// A prompt file that does not have the shape of a prompt file. Carries no path: the parser
+/// never sees one, and the caller that read the bytes wraps this into `InvalidFormat`.
 #[derive(Debug, Error)]
 pub enum FormatError {
-    #[error("Missing starting delimiter for block")]
+    #[error("line 1 must be exactly `---`")]
     MissingStartDelimiter,
-    #[error("Unterminated block, opened at line {opened_at_line}")]
-    UnterminatedBlock { opened_at_line: usize },
+    /// No line number: the opening is always line 1, and the only informative line would be
+    /// one that looks like a delimiter and is not — which costs a second scan to find.
+    #[error("the block is never closed by a `---` line")]
+    UnterminatedBlock,
 }
 
 /// Everything that can go wrong turning a prompt file into a string.
 #[derive(Debug, Error)]
 pub enum PromptError {
-    #[error("prompt file {promot_path} is not valid: {cause}")]
+    #[error("prompt file {prompt_path} is not valid: {cause}")]
     InvalidFormat {
-        /// The path of the prompt file that was invalid.
-        promot_path: String,
+        prompt_path: String,
         cause: FormatError,
     },
     #[error("input {input_name} was not provided")]
     InputNotFound {
-        /// The name of the input that was missing.
+        /// The name, never the value: render variables are caller data (invariant 2).
         input_name: String,
     },
 }
@@ -37,8 +40,8 @@ pub enum PromptError {
 mod tests {
     use super::*;
 
-    /// Stands in for a render variable: caller data, potentially PII. If this string can
-    /// be made to appear in an error, invariant 2 is broken.
+    /// A render variable: caller data. If it can be made to appear in an error, invariant 2
+    /// is broken.
     const SECRET: &str = "CARD-4111-1111-1111";
 
     /// Stands in for the *name* of a declared input, which an error may carry.
@@ -58,12 +61,12 @@ mod tests {
                 input_name: INPUT_NAME.to_string(),
             },
             PromptError::InvalidFormat {
-                promot_path: PROMPT_PATH.to_string(),
+                prompt_path: PROMPT_PATH.to_string(),
                 cause: FormatError::MissingStartDelimiter,
             },
             PromptError::InvalidFormat {
-                promot_path: PROMPT_PATH.to_string(),
-                cause: FormatError::UnterminatedBlock { opened_at_line: 42 },
+                prompt_path: PROMPT_PATH.to_string(),
+                cause: FormatError::UnterminatedBlock,
             },
         ]
     }
@@ -101,8 +104,7 @@ mod tests {
     }
 
     /// Guards the `Cargo.toml`, not this module: minijinja's `debug` feature appends the
-    /// caller's variables to a render error's `Debug` output. It is off (D-018), and
-    /// nothing in `check-invariants.sh` would notice it coming back.
+    /// caller's variables to a render error's `Debug`. It is off (D-018) and unguarded.
     #[test]
     fn minijinja_errors_carry_no_variables() {
         let mut env = minijinja::Environment::new();
