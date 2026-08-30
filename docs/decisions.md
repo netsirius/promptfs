@@ -402,3 +402,66 @@ version keeps each addition a deliberate act with a diff worth reading.
 the drift risk from duplicated version requirements outweighs the friction. A third crate
 (`promptfs-py`) that legitimately shares the core's exact list would be the trigger to
 re-examine.
+
+---
+
+## D-020 · The frontmatter split is positional, and the first close wins
+
+**Date:** 2026-08-27 · **Status:** accepted · **Touches:** invariant 6, managed-repo contract
+
+`split_frontmatter` recognises delimiters by position, never by content. The block exists only
+if line 1 is `---` followed by nothing but spaces or tabs; it ends at the *first* subsequent line
+of that same shape. Leading whitespace never opens or closes: `  ---` is content.
+After that line the function stops looking, so `---` inside the body is ordinary text. `\r\n`
+is a delimiter line ending too, a delimiter at EOF with no trailing newline closes the block,
+and the resulting empty body is not a format error.
+
+**Rejected:** taking the *last* delimiter (`rfind`), which protects a `---` written inside the
+frontmatter's own YAML. Also rejected: feeding the bytes to an incremental YAML parser and
+splitting where it reports the document ended, which is the only way to be actually correct.
+
+**Why:** the two halves are not symmetric. The body is caller text bound for a model — prose,
+Markdown, anything, `---` horizontal rules included — while the frontmatter is a small YAML
+whose schema we own and whose authors we can tell to avoid one construct. Last-wins trades a
+common case for a rare one. The cost of first-wins is smaller than it looks: a delimiter only
+counts at column 0, and a YAML block scalar's content is indented, so the obvious hole — a
+`---` line inside a `description: |` — cannot occur, and a test pins that. What remains is a
+column-0 `---` in the frontmatter, which is a YAML *document separator*: the file was not
+single-document frontmatter to begin with. Jekyll, Hugo and Astro share the same rule, and it
+fails loudly, because `serde_yaml_ng` then receives truncated prose and rejects it. The
+incremental parser is correct and unaffordable: it would parse YAML before the caller has
+decided to, and hand back owned values instead of the two borrowed slices invariant 6 wants.
+
+**Also rejected:** requiring the line to be exactly `---`, with no trailing blanks. Six of the
+seven implementations surveyed — Zola, Cobalt, pulldown-cmark, gray_matter, Jekyll, Astro —
+accept them, and a trailing space is invisible in an editor: the author sees a correct file and
+an error naming line 1. What is *not* copied is gray-matter's and Astro's tolerance of arbitrary
+trailing text, or a `trim()` on the whole line, which would let an indented `---` close the block
+from inside a YAML block scalar.
+
+**Would invalidate this:** a contract change that gives a column-0 `---` meaning inside the
+frontmatter — multi-document frontmatter, or a dialect where the separator is content. The fix
+then is an escape the contract defines, not last-wins, which would only move the failure into
+the body.
+
+---
+
+## D-021 · Prompt frontmatter tolerates unknown fields
+
+**Date:** 2026-08-27 · **Status:** accepted · **Touches:** consumer contract
+
+`PromptMeta` accepts fields it does not know instead of rejecting them.
+
+**Rejected:** `#[serde(deny_unknown_fields)]`, which would catch a typo — `temprature: 0.1` —
+at parse time instead of letting it be silently ignored.
+
+**Why:** the reader is whichever wheel the customer happens to have installed, and a wheel
+already on PyPI cannot be made to upgrade. Any field added in a later version is "unknown" to
+every older reader, so rejecting unknown fields turns a forward-compatible file into a hard
+failure at render time, and makes the bundle format's additive rule unenforceable in practice.
+Catching typos belongs to `contract-check`, which can warn without failing a production render.
+
+**Would invalidate this:** a field whose *absence* changes behaviour silently — a `disabled:
+true` that an old reader ignores while the author believes the prompt is off. That calls for a
+version marker in the file, not for rejecting unknown fields.
+
