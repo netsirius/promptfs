@@ -7,3 +7,6 @@ studio/dist
 .claude/settings.local.json
 CLAUDE.md
 .claude/local/
+
+# Personal skill vault, symlinked in: a dangling link for any other clone.
+.claude/skills/karpathy-method

@@ -3,6 +3,21 @@
 Working document for the phase-1 split described in [`AGENTS.md`](../AGENTS.md).
 Delete it when phase 1 closes; the invariants stay in AGENTS.md, the tasks do not.
 
+Live status is the [phase 1 milestone](https://github.com/netsirius/promptfs/milestone/1).
+Task numbers here predate the issues and are offset by one — use this table:
+
+| Task | Issue | Status |
+|---|---|---|
+| 1 · Workspace skeleton | — (before the tracker existed) | done |
+| 2 · `PromptError` and `PromptMeta` | [#1](https://github.com/netsirius/promptfs/issues/1) for the remaining variants | done |
+| 3 · Frontmatter split | [#2](https://github.com/netsirius/promptfs/issues/2) | done |
+| 4 · The compiled prompt | [#3](https://github.com/netsirius/promptfs/issues/3) | todo — next |
+| 5 · Undefined and missing-input policy | [#4](https://github.com/netsirius/promptfs/issues/4) | todo |
+| 6 · Router | [#5](https://github.com/netsirius/promptfs/issues/5) | todo |
+| 7 · git2 | [#6](https://github.com/netsirius/promptfs/issues/6) | todo |
+| 8 · axum | [#7](https://github.com/netsirius/promptfs/issues/7) | todo |
+| 9 · Fixtures and tests | [#8](https://github.com/netsirius/promptfs/issues/8) | todo |
+
 ## Protocol
 
 **A task marked `Owner: Héctor` is scaffolded to the edge and then stopped.** The agent
@@ -23,7 +38,7 @@ agent finishes the task.
 
 ### 1 · Workspace skeleton
 
-**Owner:** agent, with a small gap for Héctor  ·  **Status:** todo
+**Owner:** agent, with a small gap for Héctor  ·  **Status:** done
 **Crate:** — · **Invariants:** 8 · **Depends on:** —
 
 Root `Cargo.toml` as a workspace, `crates/promptfs-core` and `crates/promptfs-server`,
@@ -44,7 +59,7 @@ and add nothing for what it might need later. `check-invariants.sh` rejects `git
 
 ### 2 · `PromptError` and `PromptMeta`
 
-**Owner:** Héctor  ·  **Status:** todo
+**Owner:** Héctor  ·  **Status:** done
 **Crate:** `promptfs-core` · **Invariants:** 2 · **Depends on:** 1
 
 The error type every core function returns, and the struct the frontmatter deserializes into.
@@ -64,7 +79,7 @@ the format string is what `Display` prints. The design questions:
 - Carry `file` and `line` where the contract promises a 4xx with a location.
 
 **Rust you will meet:** `#[from]` on a variant field makes `?` convert automatically — that
-is the whole trick behind `serde_yaml::Error` turning into a `PromptError` at a `?`.
+is the whole trick behind `serde_yaml_ng::Error` turning into a `PromptError` at a `?`.
 
 **Done when:** the failing test in `error.rs` passes and every variant's `Display` names a
 location or an input name without printing a value.
@@ -73,12 +88,15 @@ location or an input name without printing a value.
 
 ### 3 · Frontmatter split
 
-**Owner:** Héctor  ·  **Status:** todo
+**Owner:** Héctor  ·  **Status:** done
 **Crate:** `promptfs-core` · **Invariants:** 6 · **Depends on:** 2
 
 Split a `.prompt.md` into its YAML frontmatter and its Jinja body.
 
-**Gap:** `fn split_frontmatter(src: &str) -> Result<(&str, &str), PromptError>`
+**Gap:** `fn split_frontmatter(src: &str) -> Result<(&str, &str), FormatError>`
+
+`FormatError`, not `PromptError`: this function never sees the file path, so wrapping the error
+into `PromptError::InvalidFormat` belongs to whoever read the bytes.
 
 **Guidance.** Deliberately a warm-up for task 4: the signature returns two `&str` **borrowed
 from the input**, no `String`, no allocation. Invariant 6 says the core does not allocate per
