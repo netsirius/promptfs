@@ -150,20 +150,23 @@ my-prompt-repository/
 
 ### Prompt format — `classifier.prompt.md`
 
+The same file the core's tests parse (`CLASSIFIER` in `parse.rs`) and the `fixture-repo`
+skill writes into Git, so the three cannot drift apart unnoticed.
+
 ```markdown
 ---
 name: classifier
-description: Clasifica la intención del usuario en soporte técnico.
+description: Classifies user intent for technical support.
 model: gpt-4o-mini
 temperature: 0.1
 inputs:
   - user_input
   - customer_tier
 ---
-Eres un asistente de clasificación.
-Cliente Tier: {{ customer_tier }}
+You are a classification assistant.
+Customer tier: {{ customer_tier }}
 
-Analiza el siguiente texto y responde en JSON:
+Classify the following and answer in JSON:
 {{ user_input }}
 ```
 
@@ -213,11 +216,12 @@ For Studio, `curl`, the CI eval runner and languages with no SDK.
    (`production`), the input variables and a routing key.
 2. **Canary evaluation** — the Router (in `promptfs-core`) reads the strategy from the
    in-memory cache of `.promptfs/deployments.yaml` and picks a target.
-3. **VFS resolution**
-   - Look up the parsed AST and template in the Moka cache.
-   - **Cache miss:** `git2` reads the object from the local bare Git repo (kept in sync via
-     webhooks/polling), parses the YAML frontmatter, and compiles the Jinja2 template into
-     a `minijinja` AST. The result is cached.
+3. **Source lookup**
+   - Look up the compiled prompt (frontmatter plus Jinja AST) for that target in the Moka
+     cache.
+   - **Cache miss:** `git2` reads the blob from the local bare Git repo (kept in sync via
+     webhooks, polling as fallback), the core splits the frontmatter and compiles the Jinja
+     body into a `minijinja` AST. The result is cached.
 4. **Render & respond** — the same core renders, and the response carries the same fields
    as the in-process path.
 
@@ -288,8 +292,6 @@ git push → webhook → server invalidates moka + fetches the bare repo
 - **Published SLA, for our hop only:** p99 < 2 s from *webhook receipt* to connected SDKs
   serving the new version. The `git push → webhook delivery` leg belongs to the Git
   provider and is documented as out of scope — GitHub makes no commitment there.
-- The SSE channel in the stack today runs Studio ↔ backend. Extending it to SDKs is new
-  work, not reuse.
 
 #### Cold start and degradation
 

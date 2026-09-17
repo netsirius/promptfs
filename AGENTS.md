@@ -46,13 +46,16 @@ These words are overloaded and the overloading is load-bearing. Use them precise
 
 ## Status
 
-Greenfield. **Current phase: 1.** Nothing below is implemented yet — this file records
-decisions already made so agents don't re-litigate them. Full spec, pipelines and
-rationale: [`docs/architecture.md`](docs/architecture.md) — read it on demand, not by default.
+**Current phase: 1, in progress.** `promptfs-core` has `PromptMeta`, `PromptError` and
+`split_frontmatter`; nothing compiles or renders yet, and `promptfs-server` is a placeholder
+`main`. Everything else below is decided but not built — this file records decisions already
+made so agents don't re-litigate them. Full spec, pipelines and rationale:
+[`docs/architecture.md`](docs/architecture.md) — read it on demand, not by default.
 
-Phase-1 work is broken down in [`docs/phase-1.md`](docs/phase-1.md). **Read it before
-starting any phase-1 task**: it carries the owner of each task, and a task owned by Héctor is
-scaffolded to the edge with a single `TODO(human)` and left unimplemented.
+Phase-1 work is broken down in [`docs/phase-1.md`](docs/phase-1.md), and tracked live as
+issues in the [phase 1 milestone](https://github.com/netsirius/promptfs/milestone/1). **Read
+the task before starting it**: it carries the owner, and a task owned by Héctor is scaffolded
+to the edge with a single `TODO(human)` and left unimplemented.
 
 | Phase | Scope |
 |---|---|
@@ -62,6 +65,9 @@ scaffolded to the edge with a single `TODO(human)` and left unimplemented.
 | 4 | `promptfs-py` (pyo3/abi3 wheels), `promptfs pull` snapshot subcommand, CI eval runner. TypeScript via wasm in 4b |
 
 ## Layout
+
+Target layout. Today only `Cargo.toml` and the two crates under `crates/` exist; the rest
+lands with its phase.
 
 ```
 promptfs/
@@ -185,16 +191,18 @@ Equally public, and equally unchangeable once a wheel is on PyPI. Full detail in
 
 ## Commands
 
-Target shape. None of these run yet in phase 1.
+The three `cargo` checks run today and must stay green. The server binary prints a
+placeholder until tasks 7–8 land; the Studio commands are phase 3.
 
 ```bash
-cargo run -p promptfs-server      # dev server
 cargo test --workspace
 cargo clippy --workspace -- -D warnings
 cargo fmt
 
-cd studio && npm run dev          # Studio dev server (proxies to :8080)
-cd studio && npm run build        # produces studio/dist/, consumed by rust-embed
+cargo run -p promptfs-server      # dev server — placeholder until the render endpoint lands
+
+cd studio && npm run dev          # phase 3: Studio dev server (proxies to :8080)
+cd studio && npm run build        # phase 3: produces studio/dist/, consumed by rust-embed
 ```
 
 ## Conventions
