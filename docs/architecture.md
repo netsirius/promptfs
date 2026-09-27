@@ -18,7 +18,8 @@ testing, deploying and canary-releasing prompts straight out of Git repositories
 - Prompts stored as text with Jinja2 syntax and YAML frontmatter metadata.
 - Native compatibility with any remote Git provider via personal access tokens (PAT)
   or SSH keys.
-- Multi-repository support, to separate projects or business domains.
+- Multi-repository support, to separate projects or business domains: one PromptFS
+  instance per repository (D-024).
 
 **Versioning and immutability**
 - Resolve prompts by Git commit, Git tag (SemVer) or branch.
@@ -34,7 +35,8 @@ testing, deploying and canary-releasing prompts straight out of Git repositories
 - Diff viewer across commits and tags.
 - Live execution panel against LLM providers (OpenAI, Anthropic, Azure OpenAI, Ollama),
   with the provider key supplied per request and never persisted.
-- Commit & Push straight to a Git branch from the PromptFS UI.
+- Propose changes from the PromptFS UI as a branch, a commit and a pull request, under the
+  signed-in user's own Git provider identity (D-027).
 
 **SDKs and REST API**
 - SDKs sync a bundle and resolve + render **in the consuming application's own process**,
@@ -49,6 +51,9 @@ testing, deploying and canary-releasing prompts straight out of Git repositories
 **DB-less architecture**
 - Zero persistent state in the application; the single source of truth is the Git repo.
 - Stateless restarts and instances (Kubernetes / container deployment).
+- One active instance per repository, restarted by its orchestrator on failure (D-028).
+  Applications stay available through an outage because of the SDK's resident bundle, not
+  because of server replicas.
 
 **Ultra-low latency**
 - Server render endpoint: **< 5 ms p99** for cached prompts.
@@ -65,6 +70,10 @@ testing, deploying and canary-releasing prompts straight out of Git repositories
 - Render variables are caller data and are treated as potentially PII: never logged, never
   echoed in an error message, never attached to a span. On the SDK path they never leave
   the customer's process at all.
+- Bundle and render endpoints require a bearer token scoped to the environment. With no
+  authentication configured the server listens on loopback only (D-026).
+- Webhook deliveries are verified against a configured secret; without one the webhook
+  route does not exist and the server polls (D-025).
 
 **Availability**
 - PromptFS is never a hard runtime dependency of a consuming application. An SDK with a
@@ -189,6 +198,11 @@ deployments:
             weight: 100
 ```
 
+This file is read at the **control ref** — `heads/main` unless configured — while each
+target's prompt source is read at the target's own ref (D-022). The environments that exist
+are the ones the file names, and a prompt with no entry for an environment is not served
+there: deploying is always explicit (D-023).
+
 ## 5. Engine architecture (DB-less core)
 
 ### 5.1 Read pipeline — in-process (SDK, the hot path)
@@ -196,8 +210,9 @@ deployments:
 Once, at application startup:
 
 1. **Bundle load** — the SDK reads a build-time snapshot if one is vendored, then calls
-   `GET /v1/bundle?env=production&format=1`. It compiles every prompt source in the bundle
-   into a `minijinja` AST and holds the result resident.
+   `GET /v1/bundle?env=production&format=1` with its environment-scoped token (D-026). It
+   compiles every prompt source in the bundle into a `minijinja` AST and holds the result
+   resident.
 2. **Subscribe** — the SDK opens the SSE stream so the server can push change notices.
 
 Per call, with no I/O whatsoever:
@@ -213,9 +228,12 @@ Per call, with no I/O whatsoever:
 For Studio, `curl`, the CI eval runner and languages with no SDK.
 
 1. **Request** — the caller posts the prompt name (`support/classifier`), the environment
-   (`production`), the input variables and a routing key.
+   (`production`), the input variables and a routing key, with a bearer token scoped to that
+   environment (D-026).
 2. **Canary evaluation** — the Router (in `promptfs-core`) reads the strategy from the
-   in-memory cache of `.promptfs/deployments.yaml` and picks a target.
+   in-memory cache of `.promptfs/deployments.yaml` and picks a target. An environment the
+   file does not name, or a prompt with no entry in it, is a 404 naming what was not found
+   (D-022, D-023).
 3. **Source lookup**
    - Look up the compiled prompt (frontmatter plus Jinja AST) for that target in the Moka
      cache.
@@ -237,13 +255,15 @@ Public and effectively frozen once a wheel is on PyPI.
 the source of every **active target** in it. Whole environment at once — typically under
 200 KB — rather than lazily per prompt: it makes cold start trivially correct and makes the
 build-time snapshot a single file. An optional namespace filter exists for large repos.
+The request carries a bearer token scoped to that environment (D-026), and an environment
+`deployments.yaml` does not name is a 404 (D-022).
 
 ```jsonc
 {
   "format": 1,
   "env": "production",
   "version": "sha256:…",          // content hash; served as ETag
-  "from_commit": "a1b2c3d",
+  "from_commit": "a1b2c3d",       // the control ref's commit (D-022)
   "prompts": {
     "support/classifier": {
       "strategy": "weighted",
@@ -285,13 +305,18 @@ git push → webhook → server invalidates moka + fetches the bare repo
                    → SDK downloads the new bundle and swaps it atomically
 ```
 
+- **The webhook is a hint.** The server fetches and compares its refs itself; deliveries are
+  verified against a secret and coalesce into one fetch, and without a secret the route does
+  not exist (D-025).
 - **Fallback** where SSE cannot pass (proxies, firewalls): `GET /v1/bundle` with
   `If-None-Match` every 30 s.
 - **Atomic swap.** Never a half-updated state. A call that started on bundle v1 finishes
   on v1.
 - **Published SLA, for our hop only:** p99 < 2 s from *webhook receipt* to connected SDKs
   serving the new version. The `git push → webhook delivery` leg belongs to the Git
-  provider and is documented as out of scope — GitHub makes no commitment there.
+  provider and is documented as out of scope — GitHub makes no commitment there. The SLA is
+  exact because one instance serves each repository, so the instance that receives the
+  webhook is the one every SDK is connected to (D-028).
 
 #### Cold start and degradation
 
@@ -299,8 +324,9 @@ Three layers, in order:
 
 1. **Build-time snapshot.** `promptfs pull --env production -o promptfs.bundle.json` in CI,
    vendored into the image. Instant, offline startup. `pull` is a subcommand of the existing
-   `promptfs-server` binary running in HTTP client mode — it talks to a PromptFS instance and
-   needs no `git2`, so it is not a fourth crate. The SDK reads the file and hands the bytes
+   `promptfs-server` binary running in HTTP client mode — it talks to a PromptFS instance,
+   with a token scoped to the environment it pulls (D-026), and needs no `git2`, so it is not
+   a fourth crate. The SDK reads the file and hands the bytes
    to the core, which never touches a filesystem (invariant 6).
 2. **Live sync.** Bundle fetched at startup, kept fresh over SSE.
 3. **Last known good.** If the connection drops, the last bundle keeps serving
@@ -344,14 +370,19 @@ traces cannot be attributed to a prompt version.
 
 ### 5.4 Write pipeline (from the UI)
 
-1. The user edits a prompt in the Monaco Editor inside PromptFS Studio.
-2. On **Commit & Push**:
-   - The frontend sends the changes and commit message to the backend.
-   - The backend calls the GitHub / Azure Repos REST API (or performs an atomic push with
-     `git2`) to create a new commit / branch / PR.
-   - The Git provider fires a webhook back to PromptFS.
-   - The backend invalidates the matching Moka cache entry, forces a fetch of the bare
-     Git repo on ephemeral disk, rebuilds the bundle and pushes it to connected SDKs.
+1. The user signs in to Studio with their Git provider's OAuth and edits a prompt in the
+   Monaco Editor. What they may see or change is what the provider lets them see or change
+   in the repository (D-027).
+2. On **Propose change**:
+   - The frontend sends the changes and a message to the backend.
+   - The backend creates a branch, a commit and a pull request through the provider's API —
+     GitHub first — with the signed-in user's own token. Branch protection and review apply
+     as they would to any pull request.
+   - Once the pull request is merged, the Git provider fires a webhook back to PromptFS.
+   - The backend invalidates the affected `moka` entries, fetches the bare Git repo on
+     ephemeral disk, rebuilds the affected bundles and pushes them to connected SDKs: the
+     same path as a change pushed from a terminal. The server learns about its own writes
+     the way it learns about anyone else's.
 
 ### 5.5 Provider keys in Studio
 
@@ -407,3 +438,7 @@ the provider call.
 - **Lazy per-prompt bundle fetching** is not built. Whole-environment bundles are simpler
   and correct on cold start; the namespace filter covers large repos until measurements say
   otherwise.
+- **Server replicas are deferred** (D-028). Without a shared database, replicas lag each
+  other between polls, and a retry that lands on a lagging one breaks invariant 4. When they
+  come they need routing-key affinity at the load balancer and an SDK that never swaps to an
+  older bundle.

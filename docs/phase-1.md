@@ -274,6 +274,8 @@ request/response types; you write what happens between them.
   never reach `git2`.
 - Invariant 2: the response carries `resolved_ref` and `commit`; the logs carry neither the
   variables nor their values.
+- The server binds `127.0.0.1` only. Authentication arrives in phase 2, and a server with none
+  configured must not listen publicly (D-026) — so this endpoint needs no auth code yet.
 
 **Done when:** a request renders end to end against a fixture repo, and a malformed prompt
 returns a 4xx naming the file and line — never a 500, never a panic.

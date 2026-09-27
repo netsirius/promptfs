@@ -39,6 +39,7 @@ These words are overloaded and the overloading is load-bearing. Use them precise
 | **target** | One weighted entry in a deployment: a ref plus its weight |
 | **ref** | A fully-qualified Git reference — `tags/v1.2.0`, `heads/main`. Never bare |
 | **ruleset** | The deployment strategies for one environment, from `deployments.yaml` |
+| **control ref** | The one ref `deployments.yaml` is read at — `heads/main` unless configured. Never a target's ref |
 | **bundle** | Ruleset + every active target's source, for one environment. What an SDK syncs |
 | **snapshot** | A bundle written to a file at build time and vendored into an app image |
 | **core** | The `promptfs-core` crate specifically. Never a loose synonym for the server |
@@ -139,7 +140,8 @@ Break these and the product stops being what it is:
    `moka` entries → fetch the bare repo → rebuild the bundle → push to connected SDKs over
    SSE. Polling is the fallback at both hops, never the primary path. The published SLA
    covers only the hop we own — webhook receipt to SDK serving — because webhook delivery
-   latency belongs to the Git provider.
+   latency belongs to the Git provider. One active instance per repository (D-028) is what
+   makes that SLA exact: the instance that receives the webhook is the one SDKs listen to.
 6. **The render path is hot and runs in someone else's process.** Frontmatter is parsed and
    the Jinja AST compiled exactly once — at cache fill on the server, at bundle load in an
    SDK — and the call path renders an already-compiled AST. Inside `promptfs-core`: no I/O,
@@ -171,7 +173,9 @@ Prompt file: YAML frontmatter (`name`, `description`, `model`, `temperature`, `i
 delimited by `---`, then a Jinja2 body.
 
 Deployment file: `deployments.<namespace>/<name>.environments.<env>` with `strategy` and
-weighted `targets`, each target a Git ref (`tags/v1.2.0`, `heads/main`).
+weighted `targets`, each target a Git ref (`tags/v1.2.0`, `heads/main`). It is read at the
+control ref, `heads/main` unless configured, and a prompt with no entry for an environment
+is not served there (D-022, D-023).
 
 Prompts are addressed as `<namespace>/<name>`, refs are always fully qualified
 (`tags/…`, `heads/…`) — never bare names.
@@ -184,6 +188,9 @@ Equally public, and equally unchangeable once a wheel is on PyPI. Full detail in
 - `GET /v1/bundle?env=<env>&format=<n>` returns the ruleset plus the source of every active
   target for that environment. The server compiles each one first; what fails to compile
   ships as an `error` with no `source`, so one broken prompt cannot take down the rest.
+- Bundle and render requests carry a bearer token scoped to the environment, and an
+  environment `deployments.yaml` does not name is a 404. A server with no authentication
+  configured listens on loopback only (D-026).
 - A render result always carries `body`, `model`, `temperature`, `resolved_ref`, `commit`,
   `bundle_version` and `source`.
 - The SDK never fails a render because PromptFS is unreachable. It fails only with no

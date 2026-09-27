@@ -465,3 +465,180 @@ Catching typos belongs to `contract-check`, which can warn without failing a pro
 true` that an old reader ignores while the author believes the prompt is off. That calls for a
 version marker in the file, not for rejecting unknown fields.
 
+---
+
+## D-022 · `deployments.yaml` is read at one control ref, and environments come from it
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** managed-repo contract, architecture.md §4, §5.3
+
+The server reads `.promptfs/deployments.yaml` at a single configured ref, the *control ref*:
+`heads/main` unless set otherwise. Each target's prompt source is read at the target's own ref.
+The environments that exist are the ones the file names, and a request for any other is a 404.
+The bundle's `from_commit` is the control ref's commit. What describes the server's own
+deployment — repository URL, credentials, listen address — comes from environment variables,
+never from the repository.
+
+**Rejected:** a control ref per environment (`heads/production` governing production),
+environments declared in the server's configuration, and following the remote's default branch
+automatically.
+
+**Why:** one ref gives one answer to "what does production serve", and turns every routing
+change — a canary weight, a promotion, a rollback — into an ordinary reviewed commit. A list of
+environments in the server's configuration would be a second list to drift from the file. A 404
+for an unknown environment makes `env="prodution"` fail when the SDK client is constructed, at
+deploy time (D-010), instead of producing a client that serves nothing. Following the remote's
+default branch was rejected because a rename would silently move what production obeys, where an
+explicit ref that does not exist fails at startup.
+
+**Would invalidate this:** teams that need a different review or protection policy for production
+routing than for staging. Per-environment control refs would then earn their complexity.
+
+---
+
+## D-023 · A prompt with no entry for an environment is not served there
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** managed-repo contract, architecture.md §4
+
+If `deployments.yaml` has no entry for a prompt in an environment, the prompt does not exist in
+that environment. Resolving it is an error naming the prompt and the environment — a 404 on the
+server path — never a fallback.
+
+**Rejected:** falling back to the control ref's head. Also rejected, for now: an
+environment-level default ref (`staging: default: heads/main`).
+
+**Why:** deploying has to be an explicit act. With a fallback, a prompt merged to `main` and never
+reviewed for production reaches production because nobody wrote a line saying it should not. An
+environment-level default is a fair convenience, but it widens the public contract; it is
+additive, so it can arrive later without breaking a single repository, while a fallback cannot be
+withdrawn once people rely on it.
+
+**Would invalidate this:** one line per prompt per environment proving to be real friction. The
+answer then is the environment-level default, added additively — not an implicit fallback.
+
+---
+
+## D-024 · One instance serves one repository
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** architecture.md §2.1
+
+A PromptFS server instance serves exactly one repository. §2.1's "multi-repository support" —
+separating projects or business domains — means one instance per repository.
+
+**Rejected:** one instance serving a configured list of repositories.
+
+**Why:** prompts are addressed as `<namespace>/<name>`, and two repositories can both define
+`support/classifier`. Serving both from one instance forces the repository into the prompt's
+name, which changes the public contract for every user, single-repository users included. One
+instance per repository keeps configuration, credentials, webhooks and failures apart: a revoked
+token or a broken `deployments.yaml` in one domain cannot touch another. An instance idles under
+50 MB, so the separation is cheap.
+
+**Would invalidate this:** prompts that need to include templates from another repository, or
+enough repositories that one process each becomes the operational burden.
+
+---
+
+## D-025 · A webhook is a hint: verified when a secret is set, absent when not
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** invariant 5, architecture.md §5.3
+
+The server takes a webhook only as a signal that the repository changed. It does not read the
+payload to learn what changed: it fetches, then compares its refs before and after. Concurrent
+deliveries coalesce into a single fetch. The webhook route exists only when a secret is
+configured, and every delivery is verified against it — GitHub's `X-Hub-Signature-256`
+(HMAC-SHA256 with a `sha256=` prefix, compared in constant time); GitLab's `X-Gitlab-Token`, or
+`webhook-signature` in its newer signing mode. Without a secret the server runs on polling alone.
+
+**Rejected:** trusting the payload's account of what changed, and accepting unsigned deliveries.
+
+**Why:** invariant 1 already makes a webhook harmless as a source of content — the server always
+reads the truth from Git — so a forged delivery costs at most one fetch, and coalescing caps even
+that. Trusting the payload would reintroduce a second, forgeable account of what changed. Tying
+the route to the secret makes a misconfiguration degrade freshness instead of opening an
+endpoint: forgetting the secret is slow, not unsafe.
+
+**Would invalidate this:** a Git provider that cannot authenticate its deliveries at all. It gets
+polling, which is already the fallback.
+
+---
+
+## D-026 · Machine clients use environment-scoped tokens; no authentication means loopback only
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** invariant 2, consumer contract, architecture.md §5.2, §5.3
+
+`GET /v1/bundle` and `POST /v1/prompts/render` require a bearer token. Tokens come from
+environment variables, are read-only, and each is scoped to the environments it may read. A
+server with no authentication configured — no tokens and no Studio sign-in — listens on the
+loopback interface only.
+
+**Rejected:** tokens as an opt-in, with an open server by default. Also rejected: delegating
+authentication entirely to the network — a private subnet, a service mesh — with no check in
+PromptFS.
+
+**Why:** a bundle is the source of every prompt deployed in an environment, and prompts are often
+the customer's intellectual property; an open default leaks all of it on the first misconfigured
+deploy. Tokens are configuration, not data, so they need no store (D-001), and they give least
+privilege: an application holds a token that reads its own environment and nothing else — never
+a Git credential. Binding to loopback when nothing is configured makes "listening publicly without
+authentication" unrepresentable rather than discouraged, and lets phase 1 ship its render
+endpoint before tokens exist.
+
+**Would invalidate this:** deployments where handing a secret to every application is harder than
+securing the network. A network-delegation mode would then be added — explicit, and logged loudly
+at startup.
+
+---
+
+## D-027 · Studio identity belongs to the Git provider; saving is a pull request
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** D-001, architecture.md §2.1, §5.4
+
+People sign in to Studio with their Git provider's OAuth, and may see or change what the provider
+lets them see or change in the repository. Saving is proposing: Studio creates a branch, a commit
+and a pull request through the provider's API, with the signed-in user's own token. The session
+travels in a signed, encrypted cookie whose key comes from an environment variable; the server
+stores nothing. One adapter per provider, GitHub first.
+
+**Rejected:** a PromptFS user and role store. Also rejected: an SSO proxy in front of Studio
+passing identity in a header, with commits pushed by `git2` under a server credential; and a
+read-only Studio in v1.
+
+**Why:** a user and role store is a database, which D-001 rules out — and the provider already
+has users, teams and per-repository permissions. Delegating means the provider enforces who may
+write, branch protection applies unchanged, and the Git history names the person behind each
+change. A server credential would make every change the same bot's, and lose that audit trail.
+The provider's API is needed regardless: a pull request is a provider concept, not a Git one. A
+read-only Studio was rejected because editing and proposing is most of the reason Studio exists.
+
+**Would invalidate this:** a provider with no API, such as a bare Git server. It would fall back
+to a `git2` push to a branch, with the pull request opened by hand.
+
+---
+
+## D-028 · One active server instance per repository
+
+**Date:** 2026-09-26 · **Status:** accepted · **Touches:** invariants 4 and 5, D-009, architecture.md §2.2
+
+v1 runs a single active instance per repository, restarted by its orchestrator when it fails.
+Replicas behind a load balancer are not supported. This narrows D-009: its SLA is exact because
+the only instance is the one that receives the webhook.
+
+**Rejected:** several replicas with eventual consistency.
+
+**Why:** without a shared database each replica keeps its own clone, and the replicas that did
+not receive the webhook lag until their next poll. In that window a universal-path retry can land
+on a lagging replica and resolve a different version — the exact failure invariant 4 exists to
+prevent — and an SDK that reconnects to one swaps back to an older bundle. The single instance
+costs little: D-010 makes an outage invisible to every application with an SDK, and the load
+that grows with usage — rendering — runs inside those applications, so the server's load grows
+with the number of application instances rather than with their traffic. For comparison
+(checked 2026-09-26), Langfuse replicates freely because every replica reads the same Postgres;
+it pays with a database to operate, a 60-second SDK cache by default, and A/B splits drawn at
+random on every call.
+
+**Would invalidate this:** universal-path traffic in production that needs high availability
+before the TypeScript SDK exists, a fleet large enough to exceed one instance's SSE capacity, or a
+hard availability requirement on Studio. Replicas then need routing-key affinity at the load
+balancer and an SDK that refuses to swap to an older bundle — and since a published wheel cannot
+be upgraded (D-008), that refusal has to ship in the first wheel if replicas are ever to be an
+option.
