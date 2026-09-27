@@ -86,32 +86,7 @@ fn strip_delimiter_line(text: &str) -> Option<&str> {
 mod tests {
     use super::*;
     use crate::PromptMeta;
-
-    /// The fixture prompt, verbatim from the `fixture-repo` skill — the same bytes task 6
-    /// will read out of a Git blob.
-    const CLASSIFIER: &str = r#"---
-name: classifier
-description: Classifies user intent for technical support.
-model: gpt-4o-mini
-temperature: 0.1
-inputs:
-  - user_input
-  - customer_tier
----
-You are a classification assistant.
-Customer tier: {{ customer_tier }}
-
-Classify the following and answer in JSON:
-{{ user_input }}
-"#;
-
-    /// The blank line and the trailing newline are part of the prompt the model sees.
-    const CLASSIFIER_BODY: &str = r#"You are a classification assistant.
-Customer tier: {{ customer_tier }}
-
-Classify the following and answer in JSON:
-{{ user_input }}
-"#;
+    use crate::fixtures::{CLASSIFIER, CLASSIFIER_BODY};
 
     /// Byte offset of `part` inside `whole`, panicking unless it really is a slice of it.
     fn offset_in(part: &str, whole: &str) -> usize {
