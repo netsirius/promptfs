@@ -642,3 +642,34 @@ hard availability requirement on Studio. Replicas then need routing-key affinity
 balancer and an SDK that refuses to swap to an older bundle — and since a published wheel cannot
 be upgraded (D-008), that refusal has to ship in the first wheel if replicas are ever to be an
 option.
+
+---
+
+## D-029 · A missing input always fails the render, and names the input
+
+**Date:** 2026-10-03 · **Status:** accepted · **Touches:** invariants 2 and 6, consumer contract
+
+Two layers, both in `CompiledPrompt::render`. First, every name declared in `inputs:` must be
+present in the caller's variables; the first one absent, in declaration order, fails the render
+with `InputNotFound { prompt_path, input_name }` before the engine runs. Second, the engine runs
+with `UndefinedBehavior::Strict`, so a variable the template uses but the author never declared
+— the typo case — fails with `RenderFailed`. A supplied null is a value, not an absence: it
+passes the check and renders as `None`. Authors write an optional variable as
+`{% if x is defined %}`.
+
+**Rejected:** `Lenient`, minijinja's default — a typo'd or forgotten variable renders as empty,
+the request succeeds, and a mutilated prompt reaches the model with nobody told. Rejected too:
+`Strict` alone — its error says `undefined value` and names nothing, so the caller cannot tell
+which input to supply. And reporting every missing input at once — it makes the variant a
+`Vec`, a heavier public contract for an error the caller fixes one deploy at a time.
+
+**Why:** an error that names the missing input and the file turns a silent quality regression
+into a failure the caller can act on, and invariant 2 holds by construction: the variant has a
+name field and no value field. The check costs no extra conversion on the hot path — the
+variables become a `minijinja::Value` once and the engine renders that same value — and it
+allocates only on failure.
+
+**Would invalidate this:** prompts in the wild that rely on silently empty optional variables
+at a scale where `is defined` is an unreasonable migration, or a need for optional declared
+inputs — which would become a frontmatter field (`optional: true`), additive under D-021, not a
+return to `Lenient`.

@@ -4,7 +4,7 @@
 //! server, the wheel and the Studio preview all get their escaping and their undefined policy
 //! from here, or they do not get them at all.
 
-use minijinja::{AutoEscape, Environment};
+use minijinja::{AutoEscape, Environment, UndefinedBehavior, Value};
 use serde::Serialize;
 
 use crate::error::PromptError;
@@ -61,6 +61,8 @@ impl CompiledPrompt {
         let mut env = Environment::new();
         env.set_auto_escape_callback(|_| AutoEscape::None);
         env.set_keep_trailing_newline(true);
+        // A typo'd variable fails the render instead of shipping a hole to the model. See D-029.
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
         env.add_template_owned(prompt_path.to_string(), body.to_string())
             .map_err(|cause| PromptError::InvalidTemplate {
                 prompt_path: prompt_path.to_string(),
@@ -80,7 +82,20 @@ impl CompiledPrompt {
     /// This is the call path of invariant 6: looking the template up is a map lookup and
     /// rendering allocates the output `String` and nothing else. Anything that parses or
     /// compiles belongs in [`compile`](Self::compile).
+    ///
+    /// Declared `inputs:` are checked first, so a missing one is named in the error; the
+    /// engine's strict mode only catches what the author did not declare, and names nothing.
     pub fn render(&self, variables: impl Serialize) -> Result<String, PromptError> {
+        // Converted once and handed to the engine as is: minijinja would convert anyway, so
+        // the check costs no second conversion (invariant 6).
+        let variables = Value::from_serialize(&variables);
+        if let Some(input_name) = self.first_missing_input(&variables) {
+            return Err(PromptError::InputNotFound {
+                input_name: input_name.to_string(),
+                prompt_path: self.prompt_path.clone(),
+            });
+        }
+
         let template = self.env.get_template(&self.prompt_path).map_err(|cause| {
             PromptError::RenderFailed {
                 prompt_path: self.prompt_path.clone(),
@@ -89,11 +104,27 @@ impl CompiledPrompt {
         })?;
 
         template
-            .render(variables)
+            .render(&variables)
             .map_err(|cause| PromptError::RenderFailed {
                 prompt_path: self.prompt_path.clone(),
                 cause,
             })
+    }
+
+    /// The first input declared in `inputs:`, in declaration order, that `variables` does not
+    /// carry. Borrowed from `meta`: the only allocation is the error's, on the failure path.
+    fn first_missing_input(&self, variables: &Value) -> Option<&str> {
+        // A supplied `None` is a value, not an absence: only undefined counts as missing.
+        self.meta
+            .inputs
+            .iter()
+            .find(|name| {
+                variables
+                    .get_attr(name)
+                    .ok()
+                    .is_none_or(|value| value.is_undefined())
+            })
+            .map(String::as_str)
     }
 
     /// The frontmatter, parsed once at compile time. `model` and `temperature` travel with
@@ -264,6 +295,66 @@ mod tests {
             !format!("{err:?}").contains(SECRET),
             "Debug leaked: {err:?}"
         );
+    }
+
+    #[test]
+    fn a_missing_declared_input_is_named_with_its_file() {
+        let err = classifier()
+            .render(context! { user_input => "Where is my order?" })
+            .expect_err("customer_tier is declared and not supplied");
+        match &err {
+            PromptError::InputNotFound {
+                input_name,
+                prompt_path,
+            } => {
+                assert_eq!(input_name, "customer_tier");
+                assert_eq!(prompt_path, CLASSIFIER_PATH);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+        assert!(err.to_string().contains(CLASSIFIER_PATH), "{err}");
+    }
+
+    /// Deterministic: the same call always names the same input, whatever the map order.
+    #[test]
+    fn with_several_missing_the_first_declared_is_named() {
+        let err = classifier()
+            .render(context! {})
+            .expect_err("nothing supplied");
+        assert!(
+            matches!(&err, PromptError::InputNotFound { input_name, .. } if input_name == "user_input"),
+            "{err:?}"
+        );
+    }
+
+    /// Pins the comment in `first_missing_input`: an explicit null is supplied.
+    #[test]
+    fn a_declared_input_supplied_as_none_is_not_missing() {
+        let body = classifier()
+            .render(context! { user_input => "Hi", customer_tier => () })
+            .expect("none is a value");
+        assert!(body.contains("Customer tier: None"), "{body}");
+    }
+
+    /// The typo case: `inputs:` cannot catch a variable the author never declared, so the
+    /// engine has to.
+    #[test]
+    fn an_undeclared_variable_fails_the_render() {
+        const TYPO: &str = "---\nname: x\n---\nTier: {{ custmer_tier }}\n";
+        let prompt = CompiledPrompt::compile(CLASSIFIER_PATH, TYPO).expect("compiles");
+        let err = prompt
+            .render(context! { customer_tier => "gold" })
+            .expect_err("strict undefined");
+        assert!(matches!(err, PromptError::RenderFailed { .. }), "{err:?}");
+    }
+
+    /// Strict is a contract for authors: an optional variable is written `is defined`.
+    #[test]
+    fn an_optional_variable_is_tested_with_is_defined() {
+        const OPTIONAL: &str =
+            "---\nname: x\n---\n{% if note is defined %}{{ note }}{% endif %}.\n";
+        let prompt = CompiledPrompt::compile(CLASSIFIER_PATH, OPTIONAL).expect("compiles");
+        assert_eq!(prompt.render(context! {}).expect("renders"), ".\n");
     }
 
     #[test]
