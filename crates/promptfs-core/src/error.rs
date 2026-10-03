@@ -63,10 +63,11 @@ pub enum PromptError {
         #[source]
         cause: minijinja::Error,
     },
-    #[error("input {input_name} was not provided")]
+    #[error("input {input_name} was not provided for prompt file {prompt_path}")]
     InputNotFound {
         /// The name, never the value: render variables are caller data (invariant 2).
         input_name: String,
+        prompt_path: String,
     },
 }
 
@@ -97,6 +98,7 @@ mod tests {
             // which is why this variant cannot leak.
             PromptError::InputNotFound {
                 input_name: INPUT_NAME.to_string(),
+                prompt_path: PROMPT_PATH.to_string(),
             },
             PromptError::InvalidFormat {
                 prompt_path: PROMPT_PATH.to_string(),
