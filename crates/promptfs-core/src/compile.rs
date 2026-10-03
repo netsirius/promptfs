@@ -357,6 +357,17 @@ mod tests {
         assert_eq!(prompt.render(context! {}).expect("renders"), ".\n");
     }
 
+    /// The other idiom authors reach for first; D-029 names both.
+    #[test]
+    fn an_optional_variable_takes_a_default() {
+        const DEFAULTED: &str = "---\nname: x\n---\nTone: {{ tone | default(\"neutral\") }}\n";
+        let prompt = CompiledPrompt::compile(CLASSIFIER_PATH, DEFAULTED).expect("compiles");
+        assert_eq!(
+            prompt.render(context! {}).expect("renders"),
+            "Tone: neutral\n"
+        );
+    }
+
     #[test]
     fn line_helpers_count_from_the_top_of_the_file() {
         assert_eq!(frontmatter_line_in_file(1), 2);

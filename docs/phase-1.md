@@ -11,8 +11,8 @@ Task numbers here predate the issues and are offset by one — use this table:
 | 1 · Workspace skeleton | — (before the tracker existed) | done |
 | 2 · `PromptError` and `PromptMeta` | [#1](https://github.com/netsirius/promptfs/issues/1) for the remaining variants | done |
 | 3 · Frontmatter split | [#2](https://github.com/netsirius/promptfs/issues/2) | done |
-| 4 · The compiled prompt | [#3](https://github.com/netsirius/promptfs/issues/3) | todo — next |
-| 5 · Undefined and missing-input policy | [#4](https://github.com/netsirius/promptfs/issues/4) | todo |
+| 4 · The compiled prompt | [#3](https://github.com/netsirius/promptfs/issues/3) | done |
+| 5 · Undefined and missing-input policy | [#4](https://github.com/netsirius/promptfs/issues/4) | done |
 | 6 · Router | [#5](https://github.com/netsirius/promptfs/issues/5) | todo |
 | 7 · git2 | [#6](https://github.com/netsirius/promptfs/issues/6) | todo |
 | 8 · axum | [#7](https://github.com/netsirius/promptfs/issues/7) | todo |
@@ -117,7 +117,7 @@ and refuse to split a character — is worth internalising now.
 
 ### 4 · The compiled prompt — ownership lesson
 
-**Owner:** Héctor, guided step by step  ·  **Status:** todo
+**Owner:** Héctor, guided step by step  ·  **Status:** done
 **Crate:** `promptfs-core` · **Invariants:** 3, 6, 8 · **Depends on:** 3
 
 Own the minijinja `Environment`, compile a prompt source to an AST once, and store the
@@ -169,7 +169,7 @@ environment is constructed in exactly one place in the workspace; the autoescape
 
 ### 5 · Undefined and missing-input policy
 
-**Owner:** Héctor decides, agent implements  ·  **Status:** todo
+**Owner:** Héctor decides, agent implements  ·  **Status:** done
 **Crate:** `promptfs-core` · **Invariants:** 2, 6 · **Depends on:** 4
 
 What happens when a variable the template uses was not supplied.
