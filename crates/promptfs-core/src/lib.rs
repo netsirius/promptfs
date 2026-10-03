@@ -16,6 +16,7 @@ pub mod compile;
 pub mod error;
 pub mod meta;
 pub mod parse;
+pub mod route;
 
 #[cfg(test)]
 mod fixtures;
@@ -24,3 +25,4 @@ pub use compile::CompiledPrompt;
 pub use error::PromptError;
 pub use meta::PromptMeta;
 pub use parse::split_frontmatter;
+pub use route::{Deployment, GitRef, RouteError, RoutingKey, Target};

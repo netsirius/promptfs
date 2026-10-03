@@ -673,3 +673,35 @@ allocates only on failure.
 at a scale where `is defined` is an unreasonable migration, or a need for optional declared
 inputs — which would become a frontmatter field (`optional: true`), additive under D-021, not a
 return to `Lenient`.
+
+---
+
+## D-030 · Routing hashes the prompt address and the key with FNV-1a, 64-bit
+
+**Date:** 2026-10-03 · **Status:** accepted · **Touches:** invariant 4, consumer contract
+
+A deployment picks its target from `fnv1a_64(address ‖ 0x00 ‖ routing_key) % total_weight`,
+where `address` is `<namespace>/<name>`. Targets own consecutive slices of `0..total_weight` in
+declaration order, each as wide as its weight; a weight of zero owns no slice. The hash, its
+constants and that byte layout are pinned by tests against values computed outside Rust.
+
+**Rejected:** `std`'s `DefaultHasher` — its documentation says the algorithm is unspecified and
+must not be relied on across releases, so a toolchain upgrade could re-route every key while
+the server and a wheel built months apart disagree. xxHash — a better distribution, at the cost
+of a new dependency in the core, which ships inside customers' processes. SHA-256 — a
+cryptographic hash defends against an adversary choosing keys, which no one here is. Hashing
+the key alone — every prompt then maps a trace to the same point, so the traces in one 10%
+canary are exactly the traces in every other 10% canary, and when quality drops nobody can
+tell which canary did it.
+
+**Why:** the promise is "the same key resolves to the same ref" across processes, languages
+and years, so the algorithm must be published and frozen. FNV-1a is a few lines, has no
+dependency, and its distribution measured 9.98% on a 90/10 split over 10,000 sequential keys.
+Hashing the address in makes two prompts' canaries share ~1% of traces instead of all of them,
+and costs nothing: the bytes are streamed into the hash, never concatenated.
+
+Consequence worth knowing: reordering a deployment's targets moves the slices, and so re-routes
+keys, even when the weights are unchanged.
+
+**Would invalidate this:** a measured distribution problem on real routing keys — which would
+mean a new hash behind a new bundle format version, never a silent swap.
