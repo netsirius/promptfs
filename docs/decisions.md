@@ -655,7 +655,7 @@ with `InputNotFound { prompt_path, input_name }` before the engine runs. Second,
 with `UndefinedBehavior::Strict`, so a variable the template uses but the author never declared
 — the typo case — fails with `RenderFailed`. A supplied null is a value, not an absence: it
 passes the check and renders as `None`. Authors write an optional variable as
-`{% if x is defined %}`.
+`{% if x is defined %}` or `{{ x | default("…") }}` — both pass under strict mode.
 
 **Rejected:** `Lenient`, minijinja's default — a typo'd or forgotten variable renders as empty,
 the request succeeds, and a mutilated prompt reaches the model with nobody told. Rejected too:
